@@ -19,6 +19,7 @@ class TCPServer
             # 外部からの接続を待ち、接続があったらコネクションを確立する
             echo "=== クライアントからの接続を待ちます ===" . PHP_EOL;
             $msg_sock = socket_accept($socket);
+            socket_getsockname($msg_sock);
             echo "=== クライアントとの接続が完了しました ===" . PHP_EOL;
 
             # クライアントから送られてきたデータを取得する
