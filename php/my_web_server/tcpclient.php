@@ -1,41 +1,41 @@
 <?php
 
-class TCPServer
+class TCPClient
 {
-    public function serve()
+    public function request()
     {
-        # サーバーを起動する
-        echo "=== サーバーを起動します ===" . PHP_EOL;
+        # サーバーへリクエストを送信する
+        echo "=== クライアントを起動します ===" . PHP_EOL;
 
         try {
             # socketを生成
             $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
             socket_set_option($socket, SOL_SOCKET, SO_REUSEADDR, 1);
 
-            # socketをlocalhostのポート8080番に割り当てる
-            socket_bind($socket, 'localhost', 8080);
-            socket_listen($socket, 10);
+            # サーバーと接続する
+            echo "=== サーバーと接続します ===" . PHP_EOL;
+            socket_connect($socket, '127.0.0.1', 80);
+            echo "=== サーバーとの接続が完了しました ===" . PHP_EOL;
 
-            # 外部からの接続を待ち、接続があったらコネクションを確立する
-            echo "=== クライアントからの接続を待ちます ===" . PHP_EOL;
-            $msg_sock = socket_accept($socket);
-            socket_getsockname($msg_sock);
-            echo "=== クライアントとの接続が完了しました ===" . PHP_EOL;
+            # サーバーに送信するリクエストをファイルから取得する
+            $request = file_get_contents('client_send.txt');
 
-            # クライアントから送られてきたデータを取得する
-            $request = socket_read($msg_sock, 1024);
+            # サーバーへリクエストを送信する
+            socket_write($socket, $request, strlen($request));
 
-            # クライアントから送られてきたデータをファイルに書き出す
-            file_put_contents('server_recv.txt', $request, LOCK_EX);
+            # サーバーから送られてきたデータを取得する
+            $response = socket_read($socket, 1024);
 
-            # 返事は特に返さず、通信を終了させる
-            socket_close($msg_sock);
+            # レスポンスの内容を、ファイルに書き出す
+            file_put_contents('client_recv.txt', $response, LOCK_EX);
+
+            # 通信を終了させる
             socket_close($socket);
         } finally {
-            echo "=== サーバーを停止します。 ===" . PHP_EOL;
+            echo "=== クライアントを停止します。 ===" . PHP_EOL;
         }
     }
 }
 
-$server = new TCPServer();
-$server->serve();
+$client = new TCPClient();
+$client->request();
