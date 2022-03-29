@@ -27,7 +27,13 @@ class TCPServer
             # クライアントから送られてきたデータをファイルに書き出す
             file_put_contents('server_recv.txt', $request, LOCK_EX);
 
-            # 返事は特に返さず、通信を終了させる
+            # クライアントへ送信するレスポンスデータをファイルから取得する
+            $response = file_get_contents('server_send.txt');
+
+            # クライアントへレスポンスを送信する
+            socket_send($msg_sock, $response, strlen($response), MSG_EOF);
+
+            # 通信を終了させる
             socket_close($msg_sock);
             socket_close($socket);
         } finally {
