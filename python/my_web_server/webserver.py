@@ -89,7 +89,7 @@ class WebServer:
                     # リクエストの処理中に例外が発生した場合はコンソールにエラーログを出力し、
                     # 処理を続行する
                     print("=== リクエストの処理中にエラーが発生しました ===")
-                    traceback.print_exec()
+                    traceback.print_exc()
 
                 finally:
                     # 例外が発生した場合も、発生しなかった場合も、TCP通信のcloseは行う
