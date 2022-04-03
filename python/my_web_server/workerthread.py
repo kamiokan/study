@@ -1,15 +1,12 @@
 import os
-import socket
 import traceback
 from datetime import datetime
+from socket import socket
+from threading import Thread
 from typing import Tuple
 
 
-class WebServer:
-    """
-    Webサーバーを表すクラス
-    """
-
+class WorkerThread(Thread):
     # 実行ファイルのあるディレクトリ
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     # 静的配信するファイルを置くディレクトリ
@@ -24,89 +21,58 @@ class WebServer:
         "gif": "image/gif",
     }
 
-    def serve(self):
-        """
-        サーバーを起動する
-        """
-        print("=== サーバーを起動します ===")
+    def __init__(self, client_socket: socket, address: Tuple[str, int]):
+        super().__init__()
 
-        try:
-            # socketを生成
-            server_socket = self.create_server_socket()
+        self.client_socket = client_socket
+        self.client_address = address
 
-            while True:
-                # 外部からの接続を待ち、接続があったらコネクションを確立する
-                print("=== クライアントからの接続を待ちます ===")
-                (client_socket, address) = server_socket.accept()
-                print(f"=== クライアントとの接続が完了しました remote_address: {address} ===")
-
-                try:
-                    # クライアントと通信して、リクエストを処理する
-                    self.handle_client(client_socket)
-
-                except Exception:
-                    # リクエストの処理中に例外が発生した場合はコンソールにエラーログを出力し、
-                    # 処理を続行する
-                    print("=== リクエストの処理中にエラーが発生しました ===")
-                    traceback.print_exc()
-
-                finally:
-                    # 例外が発生した場合も、発生しなかった場合も、TCP通信のcloseは行う
-                    client_socket.close()
-        finally:
-            print("=== サーバーを停止します。 ===")
-
-    @staticmethod
-    def create_server_socket() -> socket:
-        """
-        通信を待ち受けるためのserver_socketを生成する
-        :return:
-        """
-        # socketを生成
-        server_socket = socket.socket()
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-        # socketをlocalhostのポート8080番に割り当てる
-        server_socket.bind(("localhost", 8080))
-        server_socket.listen(10)
-        return server_socket
-
-    def handle_client(self, client_socket: socket) -> None:
+    def run(self) -> None:
         """
         クライアントと接続済みのsocketを引数として受け取り、
         リクエストを処理してレスポンスを送信する
-        :param client_socket:
-        :return:
         """
-        # クライアントから送られてきたデータを取得する
-        request = client_socket.recv(4096)
-
-        # クライアントから送られてきたデータをファイルに書き出す
-        with open("server_recv.txt", "wb") as f:
-            f.write(request)
-
-        # HTTPリクエストをパースする
-        method, path, http_version, request_header, request_body = self.parse_http_request(request)
-
         try:
-            # ファイルからレスポンスボディを生成
-            response_body = self.get_static_file_content(path)
+            # クライアントから送られてきたデータを取得する
+            request = self.client_socket.recv(4096)
 
-            # レスポンスラインを生成
-            response_line = "HTTP/1.1 200 OK\r\n"
-        except OSError:
-            # ファイルが見つからなかった場合は404を返す
-            response_body = b"<html><body><h1>404 Not Found</h1></body></html>"
-            response_line = "HTTP/1.1 404 Not Found\r\n"
+            # クライアントから送られてきたデータをファイルに書き出す
+            with open("server_recv.txt", "wb") as f:
+                f.write(request)
 
-        # レスポンスヘッダーを生成
-        response_header = self.build_response_header(path, response_body)
+            # HTTPリクエストをパースする
+            method, path, http_version, request_header, request_body = self.parse_http_request(request)
 
-        # ヘッダーとボディを空行でくっつけた上でbytesに変換し、レスポンス全体を生成する
-        response = (response_line + response_header + "\r\n").encode() + response_body
+            try:
+                # ファイルからレスポンスボディを生成
+                response_body = self.get_static_file_content(path)
 
-        # クライアントへレスポンスを送信する
-        client_socket.send(response)
+                # レスポンスラインを生成
+                response_line = "HTTP/1.1 200 OK\r\n"
+            except OSError:
+                # ファイルが見つからなかった場合は404を返す
+                response_body = b"<html><body><h1>404 Not Found</h1></body></html>"
+                response_line = "HTTP/1.1 404 Not Found\r\n"
+
+            # レスポンスヘッダーを生成
+            response_header = self.build_response_header(path, response_body)
+
+            # ヘッダーとボディを空行でくっつけた上でbytesに変換し、レスポンス全体を生成する
+            response = (response_line + response_header + "\r\n").encode() + response_body
+
+            # クライアントへレスポンスを送信する
+            self.client_socket.send(response)
+
+        except Exception:
+            # リクエストの処理中に例外が発生した場合はコンソールにエラーログを出力し、
+            # 処理を続行する
+            print("=== Worker: リクエストの処理中にエラーが発生しました ===")
+            traceback.print_exc()
+
+        finally:
+            # 例外が発生した場合も、発生しなかった場合も、TCP通信のcloseは行う
+            print(f"=== Worker: クライアントとの通信を終了します remote_address: {self.client_address} ===")
+            self.client_socket.close()
 
     @staticmethod
     def parse_http_request(request: bytes) -> Tuple[str, str, str, bytes, bytes]:
@@ -173,8 +139,3 @@ class WebServer:
         response_header += f"Content-Type: {content_type}\r\n"
 
         return response_header
-
-
-if __name__ == '__main__':
-    server = WebServer()
-    server.serve()
